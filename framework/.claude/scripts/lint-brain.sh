@@ -63,12 +63,21 @@ while IFS= read -r k; do
 done <<<"$(find -L "$BRAIN/knowledge" -name '*.md' 2>/dev/null)"
 
 # --- 5) WARN: знания без даты проверки (битемпоральные метки) ---
+# Сводка, не простыня: дописывать даты — при следующей перепроверке факта.
+noverify=""
+nv_count=0
 while IFS= read -r k; do
   [ -z "$k" ] && continue
+  [ "$(basename "$k")" = "README.md" ] && continue
   if ! grep -qiE 'проверено|верно на' "$k" 2>/dev/null; then
-    echo "WARN NO-VERIFY-DATE: ${k#"$BRAIN"/} — нет даты «проверено/верно на» (CONVENTIONS, knowledge: две даты)"
+    nv_count=$((nv_count+1))
+    [ "$nv_count" -le 5 ] && noverify="${noverify} ${k#"$BRAIN"/}"
   fi
 done <<<"$(find -L "$BRAIN/knowledge" -name '*.md' 2>/dev/null)"
+if [ "$nv_count" -gt 0 ]; then
+  extra=""; [ "$nv_count" -gt 5 ] && extra=" (и ещё $((nv_count-5)))"
+  echo "WARN NO-VERIFY-DATE: ${nv_count} файлов knowledge/ без даты «проверено/верно на»:${noverify}${extra} — дописывать при следующей перепроверке"
+fi
 
 [ "$fail" -eq 0 ] && echo "OK: ссылки brain целы (wikilinks, INDEX.md, ondemand-таблица); WARN-строки выше (если есть) — на усмотрение"
 exit "$fail"
