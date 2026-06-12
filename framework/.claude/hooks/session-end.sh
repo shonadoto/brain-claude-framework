@@ -4,7 +4,9 @@
 # Формат строки лога (TSV): дата \t session_id \t cwd \t transcript_path \t размер_транскрипта \t reason
 set -u
 
-BRAIN="__BRAIN_DIR__"
+BRAIN="$(cat "$HOME/.claude/brain-dir" 2>/dev/null || true)"
+[ -n "$BRAIN" ] || BRAIN="$HOME/brain"
+[ -d "$BRAIN" ] || exit 0
 LOG="${BRAIN_SESSIONS_LOG:-$BRAIN/inbox/sessions.log}"
 
 input=$(cat)

@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Линт целостности brain: битые wikilinks, битые markdown-пути в INDEX.md,
-# отсутствующие файлы из таблицы rules/ondemand-rules.md.
+# отсутствующие файлы из таблицы rules/ondemand-rules.md;
+# предупреждения (не ошибки): знания-сироты вне INDEX.md, знания без даты проверки.
 # Запускается шагами /retro и /evolve; можно руками: .claude/scripts/lint-brain.sh
 #
 # ВАЖНО: brain может быть симлинком — все find ТОЛЬКО с -L
 # (find без -L молча не спускается в симлинк и даёт ложные «файла нет»).
 set -u
 
-BRAIN=$(readlink -f "__BRAIN_DIR__")
+BRAIN="$(cat "$HOME/.claude/brain-dir" 2>/dev/null || true)"
+[ -n "$BRAIN" ] || BRAIN="$HOME/brain"
+BRAIN=$(readlink -f "$BRAIN")
 fail=0
 
 # --- 1) wikilinks в курируемых слоях ---
@@ -49,5 +52,23 @@ while IFS= read -r m; do
   fi
 done <<<"$od_refs"
 
-[ "$fail" -eq 0 ] && echo "OK: ссылки brain целы (wikilinks, INDEX.md, ondemand-таблица)"
+# --- 4) WARN: знания-сироты (файл в knowledge/ без строки в INDEX.md) ---
+while IFS= read -r k; do
+  [ -z "$k" ] && continue
+  rel="${k#"$BRAIN"/}"
+  base=$(basename "$k")
+  if ! grep -qF "$rel" "$BRAIN/INDEX.md" 2>/dev/null && ! grep -qF "${base%.md}" "$BRAIN/INDEX.md" 2>/dev/null; then
+    echo "WARN ORPHAN: $rel — нет строки в INDEX.md (CONVENTIONS: знание = строка в индексе)"
+  fi
+done <<<"$(find -L "$BRAIN/knowledge" -name '*.md' 2>/dev/null)"
+
+# --- 5) WARN: знания без даты проверки (битемпоральные метки) ---
+while IFS= read -r k; do
+  [ -z "$k" ] && continue
+  if ! grep -qiE 'проверено|верно на' "$k" 2>/dev/null; then
+    echo "WARN NO-VERIFY-DATE: ${k#"$BRAIN"/} — нет даты «проверено/верно на» (CONVENTIONS, knowledge: две даты)"
+  fi
+done <<<"$(find -L "$BRAIN/knowledge" -name '*.md' 2>/dev/null)"
+
+[ "$fail" -eq 0 ] && echo "OK: ссылки brain целы (wikilinks, INDEX.md, ondemand-таблица); WARN-строки выше (если есть) — на усмотрение"
 exit "$fail"

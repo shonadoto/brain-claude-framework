@@ -1,0 +1,13 @@
+{
+  "name": "brain-claude-framework",
+  "owner": {
+    "name": "shonadoto"
+  },
+  "plugins": [
+    {
+      "name": "brain",
+      "source": "./",
+      "description": "Личная память и контур обучения для Claude Code"
+    }
+  ]
+}

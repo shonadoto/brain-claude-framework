@@ -1,0 +1,10 @@
+{
+  "name": "brain",
+  "displayName": "Brain — память и контур обучения",
+  "description": "Личная память для Claude Code: журналы задач, знания, открытые петли, правила и самообучение на коррекциях. Markdown-файлы, которыми владеешь ты.",
+  "author": {
+    "name": "shonadoto"
+  },
+  "version": "1.1.0",
+  "repository": "https://github.com/shonadoto/brain-claude-framework"
+}
