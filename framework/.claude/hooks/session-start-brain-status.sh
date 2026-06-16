@@ -17,10 +17,13 @@ if [ ! -t 0 ]; then
   [ -n "$input" ] && src=$(jq -r '.source // "startup"' <<<"$input" 2>/dev/null || echo "startup")
 fi
 
-total=$(grep -c . "$BRAIN/inbox/sessions.log" 2>/dev/null) || total=0
-digested=$(grep -c . "$BRAIN/inbox/sessions-digested.log" 2>/dev/null) || digested=0
-queue=$(( total - digested ))
-[ "$queue" -lt 0 ] && queue=0
+# Очередь digest = уникальные session-id из sessions.log, ещё не попавшие в digested-лог.
+# sessions.log пишет одну сессию многократно (по событию) → считать по строкам нельзя,
+# только по уникальному id (col2 в sessions.log, col1 в sessions-digested.log).
+queue=$(comm -23 \
+  <(awk -F'\t' '$2!=""{print $2}' "$BRAIN/inbox/sessions.log" 2>/dev/null | sort -u) \
+  <(awk -F'\t' '$1!=""{print $1}' "$BRAIN/inbox/sessions-digested.log" 2>/dev/null | sort -u) \
+  | grep -c .) || queue=0
 
 loops=$(grep -c '^- \[ \]' "$BRAIN/loops.md" 2>/dev/null) || loops=0
 
