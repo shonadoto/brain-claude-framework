@@ -36,7 +36,10 @@ stale=$(find -L "$BRAIN/tasks" -maxdepth 2 -name CONTEXT.md -not -path '*archive
 # необработанные daily-заметки inbox (вне archive)
 inbox=$(find -L "$BRAIN/inbox" -maxdepth 1 -name '20*.md' 2>/dev/null | wc -l | tr -d ' ')
 
-msg="[brain] очередь digest: ${queue} сессий; открытых петель: ${loops}; необработанных заметок inbox: ${inbox}"
+# proposals со статусом «ждёт решения»
+proposals=$(grep -c '^- статус:.*ждёт решения' "$BRAIN/learning/proposals.md" 2>/dev/null) || proposals=0
+
+msg="[brain] очередь digest: ${queue} сессий; открытых петель: ${loops}; необработанных заметок inbox: ${inbox}; proposals ждут решения: ${proposals}"
 [ -n "$stale" ] && msg="${msg}; CONTEXT.md старше 7 дней: ${stale}"
 [ "$queue" -ge 5 ] && msg="${msg}. Очередь digest большая — предложи пользователю прогнать /digest."
 [ "$inbox" -ge 5 ] && msg="${msg} Заметок в inbox накопилось — предложи пользователю прогнать /inbox-process."
@@ -71,6 +74,64 @@ fi
 # --- краткая сводка активных проектов (только из brain, без сверки статусов во внешнем трекере) ---
 today=$(TZ=Europe/Moscow date +%Y-%m-%d 2>/dev/null)
 today_s=$(date -d "$today" +%s 2>/dev/null) || today_s=
+
+# --- Петли (loops.md) по секциям; для «Жду» помечаем возраст >5 дней ---
+# Печатает открытые пункты ([ ]) указанной секции без префикса "- [ ] ".
+loop_section() {
+  awk -v h="$1" '
+    $0 ~ "^## " h {f=1; next}
+    /^## /{f=0}
+    f && /^- \[ \] / { line=$0; sub(/^- \[ \] /,"",line); print line }
+  ' "$BRAIN/loops.md"
+}
+
+loops_out=""
+for sec in "Сделать" "Жду" "Вопросы" "Потом"; do
+  items=$(loop_section "$sec")
+  [ -n "$items" ] || continue
+  n=$(printf '%s\n' "$items" | grep -c .)
+  loops_out="${loops_out}${sec} (${n}):"$'\n'
+  while IFS= read -r it; do
+    [ -n "$it" ] || continue
+    mark=""
+    # «Жду» дольше 5 дней — пометить протухание (дата = первая YYYY-MM-DD в пункте)
+    if [ "$sec" = "Жду" ] && [ -n "$today_s" ]; then
+      d=$(printf '%s' "$it" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1)
+      if [ -n "$d" ]; then
+        d_s=$(date -d "$d" +%s 2>/dev/null) || d_s=
+        if [ -n "$d_s" ]; then
+          age=$(( (today_s - d_s) / 86400 ))
+          [ "$age" -gt 5 ] && mark=" ⚠ ${age}д"
+        fi
+      fi
+    fi
+    loops_out="${loops_out}  - ${it}${mark}"$'\n'
+  done <<< "$items"
+done
+if [ -n "$loops_out" ]; then
+  msg="${msg}
+## Петли
+${loops_out%$'\n'}"
+fi
+
+# --- Задачи (INDEX.md, секция «Задачи»; архивные по пути archive/ пропускаем) ---
+tasks_out=$(awk '
+  /^## Задачи/{f=1; next}
+  /^## /{f=0}
+  f && /^- \[/ {
+    if ($0 ~ /\]\([^)]*archive\//) next
+    line=$0
+    sub(/^- \[/,"",line)            # убрать "- ["
+    gsub(/\]\([^)]*\)/," ",line)    # убрать "](path)" — оставить якорь + хвост
+    gsub(/  +/," ",line)
+    print "- " line
+  }
+' "$BRAIN/INDEX.md")
+if [ -n "$tasks_out" ]; then
+  msg="${msg}
+## Задачи
+${tasks_out}"
+fi
 
 proj_lines=""
 for f in "$BRAIN"/projects/*/CONTEXT.md; do
