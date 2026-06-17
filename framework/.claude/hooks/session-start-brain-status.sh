@@ -103,4 +103,12 @@ if [ -n "$proj_lines" ]; then
 $(printf '%b' "$proj_lines")"
 fi
 
-echo "$msg"
+# Вывод: JSON — additionalContext отдаёт сводку в контекст модели, systemMessage печатает
+# её пользователю в терминал. Обычный stdout SessionStart-хука пользователю НЕ виден,
+# поэтому без systemMessage сводку видит только модель. jq нет → fallback на stdout (видит модель).
+if command -v jq >/dev/null 2>&1; then
+  jq -n --arg t "$msg" \
+    '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $t}, systemMessage: $t}'
+else
+  echo "$msg"
+fi
