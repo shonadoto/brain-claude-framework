@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# SessionStart hook: однострочная сводка состояния brain в контекст новой сессии.
+# SessionStart hook: сводка состояния brain в контекст новой сессии.
+# Строка гигиены + краткая сводка активных проектов (title + число открытых хвостов +
+# дата снапшота brain) — как /status, но БЕЗ сверки статусов во внешнем трекере.
 # Дополнительно: подсказка /digest при очереди ≥5, подсказка /inbox-process при ≥5 заметок,
 # проверка версии фреймворка (по суточному кэшу, сеть — только фоном),
 # восстановление контекста после /clear или компакции (поле source из stdin).
@@ -64,6 +66,41 @@ fi
 # --- восстановление после /clear или компакции ---
 if [ "$src" = "clear" ] || [ "$src" = "compact" ]; then
   msg="${msg} Контекст был очищен (${src}) — если шла работа над задачей, восстанови контекст: прочитай tasks/<task>/CONTEXT.md и хвост journal.md, не переспрашивая пользователя с нуля."
+fi
+
+# --- краткая сводка активных проектов (только из brain, без сверки статусов во внешнем трекере) ---
+today=$(TZ=Europe/Moscow date +%Y-%m-%d 2>/dev/null)
+today_s=$(date -d "$today" +%s 2>/dev/null) || today_s=
+
+proj_lines=""
+for f in "$BRAIN"/projects/*/CONTEXT.md; do
+  [ -f "$f" ] || continue
+  case "$f" in *"/archive/"*) continue;; esac
+  head -10 "$f" | grep -qiE '^status:[[:space:]]*active' || continue
+
+  id=$(basename "$(dirname "$f")")
+  title=$(grep -m1 '^# ' "$f" | sed 's/^#\+[[:space:]]*//')
+  tails=$(awk '/^## Открытые хвосты/{f=1;next} /^## /{f=0} f&&/^- /{c++} END{print c+0}' "$f")
+  # дата снапшота — последняя дата в строках-маркерах со словом "снапшот"
+  snap=$(grep -hiE 'снапшот' "$f" 2>/dev/null \
+    | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | sort | tail -1)
+
+  line="- ${id} — ${title} | хвостов: ${tails}"
+  if [ -n "$snap" ]; then
+    line="${line} | снапшот ${snap}"
+    snap_s=$(date -d "$snap" +%s 2>/dev/null) || snap_s=
+    if [ -n "$snap_s" ] && [ -n "$today_s" ]; then
+      days=$(( (today_s - snap_s) / 86400 ))
+      [ "$days" -gt 7 ] && line="${line} ⚠ ${days}д"
+    fi
+  fi
+  proj_lines="${proj_lines}${line}\n"
+done
+
+if [ -n "$proj_lines" ]; then
+  msg="${msg}
+[brain] активные проекты (снапшот brain, без сверки статусов — /status для актуального):
+$(printf '%b' "$proj_lines")"
 fi
 
 echo "$msg"
